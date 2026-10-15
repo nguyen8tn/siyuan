@@ -1,0 +1,48 @@
+# SiYuan — local image. Copy .env.example to .env and set SIYUAN_ACCESS_AUTH_CODE (or bypass for dev only).
+# Workspace: SIYUAN_WORKSPACE_PATH in the container must match the right-hand side of the volume mount.
+#
+# `image` alone makes Docker try to pull from a registry if the tag is missing locally.
+# `pull_policy: never` uses only your local image; `build` tags it after `docker compose build` or `up --build`.
+
+services:
+  siyuan:
+    # Official prebuilt image. The image is already present locally (pulled via mirror.gcr.io
+    # because the proxy returned 503 for Docker Hub blobs), so never re-pull it.
+    image: docker.io/b3log/siyuan:latest
+    pull_policy: never
+    # To build from this source instead (needs Docker BuildKit or Podman >= 5 for the
+    # `RUN <<EORUN` heredocs in the Dockerfile), swap in:
+    #   image: siyuan-agent-rag:latest
+    #   build:
+    #     context: .
+    #     dockerfile: Dockerfile
+    container_name: siyuan-agent-rag
+    restart: unless-stopped
+    ports:
+      # Localhost only. Remove "127.0.0.1:" to reach SiYuan from other devices.
+      - "127.0.0.1:${SIYUAN_PORT:-6806}:6806"
+    volumes:
+      # :Z relabels for SELinux (ignored where SELinux is off).
+      - "${SIYUAN_WORKSPACE_HOST:?set SIYUAN_WORKSPACE_HOST in .env}:/siyuan/workspace:Z"
+      # With PUID=0 the entrypoint does not create the siyuan user, so /home/siyuan would not
+      # exist and its `chown -R /home/siyuan/` (under `set -e`) would crash the container.
+      - siyuan-home:/home/siyuan
+    environment:
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      # Rootless Podman: container root (0) maps to your host user, so files in the
+      # workspace stay owned by you. Any other value maps to a sub-uid and the
+      # entrypoint's `chown -R` would fail (e.g. on NTFS) or take ownership away from you.
+      # With rootful Docker, use your real uid/gid (e.g. 1000) instead.
+      PUID: ${PUID:-0}
+      PGID: ${PGID:-0}
+      SIYUAN_WORKSPACE_PATH: /siyuan/workspace
+      SIYUAN_ACCESS_AUTH_CODE: ${SIYUAN_ACCESS_AUTH_CODE:-}
+      SIYUAN_ACCESS_AUTH_CODE_BYPASS: ${SIYUAN_ACCESS_AUTH_CODE_BYPASS:-false}
+    # Official image (v3.8+): the kernel is a CLI and needs the `serve` subcommand to start the
+    # HTTP server. Workspace and auth code come from env (SIYUAN_WORKSPACE_PATH,
+    # SIYUAN_ACCESS_AUTH_CODE). If you switch back to the locally built image (older kernel,
+    # CMD is /opt/siyuan/kernel), use `command: []` there instead.
+    command: ["serve"]
+
+volumes:
+  siyuan-home:

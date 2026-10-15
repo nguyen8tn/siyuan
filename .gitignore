@@ -54,3 +54,8 @@ muslbin/
 /.cache/ocr/
 /app/stage/ocr/models/
 /app/stage/ocr/runtime/
+
+# Local SiYuan deployment (docker-compose): workspace data, backups and secrets
+/data/
+/backups/
+.env
